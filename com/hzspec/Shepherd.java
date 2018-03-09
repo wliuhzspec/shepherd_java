@@ -4,57 +4,34 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
-//import com.chinaunicom.smartgateway.deviceservices.*
 
 public class Shepherd{
-	public static void main(String[] args) throws InterruptedException{
+	public static void main(String[] args) throws Exception{
 		
-		//String apMacAddr = getDeviceMAC();
-		String apMacAddr = "e8:4e:06:47:77:8c";
-		//to register user and devices
+		String apMacAddr = getApMac();
 		
-		String usrRegUrl = "http://60.205.212.99/squirrel/v1/users";
-		String userId = "test";
-		String passWd = "test";
-		String phoneNum = "123456";
-		String email = "test@test.com";
-		String wanIp = "60.205.212.99";
+        Properties prop = new Properties();
+        FileInputStream iniConfig = new FileInputStream("ini.cfg");
+        prop.load(iniConfig);
+        iniConfig.close();
 
-			
-		String usrRegParam ="{\"userId\":\"";
-		usrRegParam += userId;
-		usrRegParam += "\"";
+		String userRegUrl = prop.getProperty("UserRegURL");
+        String userRegParam = getUserRegParam();
 
-		usrRegParam += "\"password\":\"";
-		usrRegParam += passWd;
-		usrRegParam += "\"";
+        //register user
+		sendPost(userRegUrl, userRegParam);
 
-		usrRegParam += "\"phoneNumber\":\"";
-		usrRegParam += phoneNum;
-		usrRegParam += "\"";
 
-		usrRegParam += "\"emailAddr\":\"";
-		usrRegParam += email;
-		usrRegParam += "\"";
-
-		usrRegParam += "\"ip\":\"";
-		usrRegParam += wanIp;
-		usrRegParam += "\"";
-		
-		usrRegParam += "\"apMacAddr\":\"";
-		usrRegParam += apMacAddr;
-		usrRegParam += "\"}";
-
-		sendPost(usrRegUrl, usrRegParam);
-
+        //query periodically
 		while(true){
 			Thread.sleep(5000);
-			String queryUrl = "http://60.205.212.99/ext/v1/devices/ap_interval";
-			String queryParm = "apMacAddr=";
-			apMacAddr = apMacAddr.replaceAll(":", "%3A");
-			queryParm += apMacAddr;
+            String queryUrl = prop.getProperty("QueryURL");
 
-			String queryResp = sendGet(queryUrl, queryParm);
+			StringBuffer queryParam = new StringBuffer();
+            queryParam.append("apMacAddr=");
+            queryParam.append(apMacAddr);
+
+			String queryResp = sendGet(queryUrl, queryParam.toString());
 			if (!"".equals(queryResp) ) {
 				handleQueryResponse(queryResp);
 			}
@@ -67,6 +44,7 @@ public class Shepherd{
         BufferedReader in = null;
         try {
             String urlNameString = url + "?" + param;
+            
             URL realUrl = new URL(urlNameString);
             HttpURLConnection connection = (HttpURLConnection) realUrl.openConnection();
 			connection.setRequestMethod("GET");
@@ -182,8 +160,16 @@ public class Shepherd{
 						break;
 					case '3':
 						//to report device status
-						reportLANHostInfo();
-						break;
+                        try {
+                            reportLANHostInfo();
+                        }
+                        catch (Exception e){
+                            System.out.println("report active host exceptin ！" + e);
+                            e.printStackTrace();
+
+                        }
+
+                        break;
 
 				}	
 
@@ -196,19 +182,83 @@ public class Shepherd{
 		//deleteLANHostFromBlackList(removeFromBlackArray);
 	}
 
-	public static void reportLANHostInfo() {
+	public static void reportLANHostInfo() throws Exception {
 	
-		//String hostInfo = getLANHostInfoByMac();
-		
-		//String hostInfo = getLANHostInfoByClass("ONLINE");
-		//String apMacAddr = getDeviceMAC();
-		String hostInfo =  "{ \"Result\":0,  \"List\": [{ \"Class\":ONLINE, \"MAC\":\"00:01:02:03:04:05\", \"DhcpName\":\"client1\", \"DeviceName\":\"client1\", \"IP\":\"192.168.100.100\", \"DevType”：\"PC\", \"ConnectInterface \":\"LAN1\", \"OnlineTime \":\"100\", \"StorageAccessStatus\":\"ON\" } ] }";
+        try {
+            Properties prop = new Properties();
+            FileInputStream iniConfig = new FileInputStream("ini.cfg");
+            prop.load(iniConfig);
+            iniConfig.close();
+
+            String activeHostReportUrl = prop.getProperty("ActiveHostReportURL");
+            String hostInfo = getHostInfo();  
+            if (hostInfo != null) {
+                sendPost(activeHostReportUrl, hostInfo);
+            }
+        }
+        catch(Exception e) {
+            e.printStackTrace();
+        }
+	}
+
+
+    public static String getUserRegParam() {
+    
+        
+        Map <String, String> testUserRegParam = new HashMap <String, String> ();
+        testUserRegParam.put("userId", "test");
+        testUserRegParam.put("passwd", "test" );
+        testUserRegParam.put("phoneNumber", "1234");
+        testUserRegParam.put("emailAddr", "test@test.com");
+        testUserRegParam.put("ip", "60.205.212.99");
+        testUserRegParam.put("apMacAddr", "e8:4e:06:47:77:8c");
+
+			
+		StringBuffer userRegParam = new StringBuffer ();
+        //Set entrySet = testUserRegParam.entrySet();
+
+        userRegParam.append("{\"userId\":\"");
+
+        for (Map.Entry <String, String> entry : testUserRegParam.entrySet()) {
+            userRegParam.append("\"");
+            userRegParam.append(entry.getKey());
+            userRegParam.append("\"");
+    
+            userRegParam.append(":");
+
+
+            userRegParam.append("\"");
+            userRegParam.append(entry.getValue());
+            userRegParam.append("\"");
+        
+            userRegParam.append(",");
+        }
+
+        userRegParam.append("}");
+
+        return userRegParam.toString();
+    
+    }
+
+
+    public static String getApMac() {
+    
 		String apMacAddr = "e8:4e:06:47:77:8c";
+        return apMacAddr.replaceAll(":", "%3A");
+    }
+
+
+    public static String getHostInfo() {
+    
+		//String hostInfo = getLANHostInfoByClass("ONLINE");
+		String apMacAddr = getApMac();
+		String hostInfo =  "{ \"Result\":0,  \"List\": [{ \"Class\":ONLINE, \"MAC\":\"00:01:02:03:04:05\", \"DhcpName\":\"client1\", \"DeviceName\":\"client1\", \"IP\":\"192.168.100.100\", \"DevType”：\"PC\", \"ConnectInterface \":\"LAN1\", \"OnlineTime \":\"100\", \"StorageAccessStatus\":\"ON\" } ] }";
+		//String apMacAddr = "e8:4e:06:47:77:8c";
 
 		// getHostInfo return error
 		if(!hostInfo.contains(" \"Result\":0")) {
 			System.out.println("getHostInfo return code != 0");
-			return;
+			return null;
 		}
 		else{
 			String apMacField = "\"apMacAddr\":\"";
@@ -220,11 +270,11 @@ public class Shepherd{
 			hostInfo = hostInfo.replaceAll("MAC", "deviceMacAddr");
 			hostInfo = hostInfo.replaceAll("IP", "deviceIp");
 
-			String url = "http://60.205.212.99/squirrel/v1/devices/ap/devices/active";
+            return hostInfo;
+        }
 
-			sendPost(url, hostInfo);
-		}
-	}
+    
+    }
 
 
 }
